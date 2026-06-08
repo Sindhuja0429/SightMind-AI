@@ -1,4 +1,5 @@
 import streamlit as st
+import google.api_core.exceptions as google_exceptions
 from google import genai
 from PIL import Image
 from gtts import gTTS
@@ -41,29 +42,34 @@ if camera_feed:
     st.subheader("2. Real-Time Processing")
     
     with st.spinner("Executing multimodal analysis..."):
+        prompt_directive = "Analyze the image and provide an accessible description. Include any visible text."
         try:
-            prompt_directive = (
-                "You are an advanced computer vision assistant. Describe this scene precisely. "
-                "Identify core objects, read visible text, and give a context summary in 3 sentences max. "
-                "Keep it punchy and ready to be read out loud."
-            )
-            
             response = client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=[prompt_directive, pil_image]
             )
             
             analysis_text = response.text
+
             st.success("Analysis Complete!")
-            st.markdown(f"**AI Vision Output:**\n\n{analysis_text}")
-            
+            st.markdown(f"***AI Vision Output:***\n\n{analysis_text}")
+
             # Text-To-Speech Generation
             with st.spinner("Synthesizing audio..."):
                 tts = gTTS(text=analysis_text, lang='en', tld='com')
                 audio_buffer = io.BytesIO()
                 tts.write_to_fp(audio_buffer)
                 audio_buffer.seek(0)
-                st.audio(audio_buffer, format="audio/mp3", autoplay=True)
-                
-        except Exception as error:
-            st.error(f"Execution failure: {error}")
+            
+            # Audio Player Interface Layout
+            st.write("🔊 **Listen to Audio Description:**")
+            st.audio(audio_buffer, format="audio/mp3", autoplay=True)
+
+        except google_exceptions.ResourceExhausted:
+            st.error("⚠️ **API Rate Limit Reached (Error 429):** The free tier of the Gemini API is temporarily restricted due to too many requests. Please wait a minute and click 'Take Photo' again.")
+
+        except google_exceptions.ServiceUnavailable:
+            st.error("🚦 **Google Servers Busy (Error 503):** Google's servers are experiencing high demand right now. Let's try sending the request again in a few moments.")
+
+        except Exception as e:
+            st.error(f"Something unexpected occurred: {e}")
